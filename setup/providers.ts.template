@@ -1,0 +1,11 @@
+import 'server-only';
+import {betterAuth} from 'better-auth';
+import {pool} from './catalog';
+import {isAdmin} from './types';
+const env=process.env,dev=env.NODE_ENV==='development';
+export const authReady=Boolean(env.DATABASE_URL&&(env.BETTER_AUTH_SECRET?.length??0)>=32);
+const optionalOrigins=(values:(string|undefined)[])=>values.filter((x):x is string=>Boolean(x));
+const auth=()=>{if(!authReady)throw Error('Administrator configuration required');return betterAuth({database:pool,baseURL:env.BETTER_AUTH_URL??(env.VERCEL_PROJECT_PRODUCTION_URL?`https://${env.VERCEL_PROJECT_PRODUCTION_URL}`:env.VERCEL_URL?`https://${env.VERCEL_URL}`:env.V0_RUNTIME_URL),trustedOrigins:dev?optionalOrigins(['http://localhost:3000',env.V0_RUNTIME_URL,env.V0_DEV_APP_URL,env.V0_BUILD_URL,env.V0_SANDBOX_URL]):optionalOrigins([env.BETTER_AUTH_URL,env.VERCEL_URL&&`https://${env.VERCEL_URL}`,env.VERCEL_PROJECT_PRODUCTION_URL&&`https://${env.VERCEL_PROJECT_PRODUCTION_URL}`]),emailAndPassword:{enabled:true,disableSignUp:true,revokeSessionsOnPasswordReset:true,...(env.RESEND_API_KEY&&env.RESEND_FROM_EMAIL?{sendResetPassword:async({user,url}:{user:{email:string};url:string})=>{const res=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${env.RESEND_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({from:env.RESEND_FROM_EMAIL,to:[user.email],subject:'Reset your Sidewave administrator password',text:`Use this one-time link to reset your password: ${url}`})});if(!res.ok)throw Error('Password reset email unavailable')}}:{})},user:{additionalFields:{role:{type:'string',required:false,defaultValue:'none',input:false}}},session:{expiresIn:604800,updateAge:86400},rateLimit:{enabled:true,window:60,max:15},advanced:{ipAddress:{disableIpTracking:true},...(dev?{defaultCookieAttributes:{sameSite:'none' as const,secure:true}}:{})}})};
+let instance:ReturnType<typeof auth>|undefined;const get=()=>instance??=auth();
+export async function administrator(headers:Headers){if(!authReady)return false;const s=await get().api.getSession({headers});return isAdmin(s)}
+export async function authRequest(req:Request){if(!authReady)return Response.json({error:'Not configured'},{status:503});return get().handler(req)}
