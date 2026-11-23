@@ -98,3 +98,5 @@ Production requires the same server-only configuration, the enabled auth adapter
 ### Live acceptance checklist
 
 These steps need your own credentials and were not run against live services here. Sign in, reload a protected page, sign out and confirm it is inaccessible. Upload a real MP3 as a draft; confirm its public slug, stream and download endpoints reject access. Publish it; play and seek without any count change. Download once and confirm exactly one event and increment. Test concurrent requests from distinct allowed clients. Verify rankings, edit metadata, replace audio/artwork, unpublish and delete. Verify missing objects do not increment counts; test optional password recovery with your verified sender. Unit tests do not replace these live checks.
+#   S t e r i o - V i b e s  
+ 
