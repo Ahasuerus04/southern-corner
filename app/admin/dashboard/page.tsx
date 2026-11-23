@@ -62,7 +62,7 @@ export default async function Dashboard() {
   return (
     <main className="wrap page">
       <span className="kicker">ADMINISTRATOR / OVERVIEW</span>
-      <h1>Archive dashboard</h1>
+      <h1>Dashboard</h1>
       <AdminNav />
 
       {!storageConfigured && (
