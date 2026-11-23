@@ -9,15 +9,16 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint app components lib setup tests",
-    "auth:enable": "bun --env-file=.env.local setup/enable.ts",
-    "db:migrate": "bun --env-file=.env.local run drizzle-kit migrate",
-    "admin:create": "bun --env-file=.env.local setup/admin.ts"
+    "auth:enable": "bun --env-file=.env.local --env-file=.env setup/enable.ts",
+    "db:migrate": "bun --env-file=.env.local --env-file=.env run drizzle-kit migrate",
+    "admin:create": "bun --env-file=.env.local --env-file=.env setup/admin.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1171.0",
     "@aws-sdk/s3-request-presigner": "^3.1171.0",
     "@base-ui/react": "^1.5.0",
     "@vercel/analytics": "1.6.1",
+    "bcryptjs": "^3.0.3",
     "better-auth": "^1.7.25",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

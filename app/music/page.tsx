@@ -14,10 +14,16 @@ export default async function Music({
 }) {
   const p = await searchParams,
     pg = Math.min(100000, Math.max(1, parseInt(p.page) || 1));
+  const category =
+    typeof p.category === "string"
+      ? p.category
+      : typeof p.genre === "string"
+        ? p.genre
+        : "";
   const [all, gs] = await Promise.all([
     catalog({
       q: typeof p.q === "string" ? p.q : "",
-      genre: typeof p.genre === "string" ? p.genre : "",
+      genre: category,
       sort: p.sort,
       limit: 17,
       offset: (pg - 1) * 16,
@@ -42,8 +48,8 @@ export default async function Music({
             maxLength={120}
           />
         </label>
-        <select name="genre" aria-label="Genre" defaultValue={p.genre}>
-          <option value="">All genres</option>
+        <select name="category" aria-label="Category" defaultValue={category}>
+          <option value="">All categories</option>
           {gs.map((g) => (
             <option key={g}>{g}</option>
           ))}
@@ -62,7 +68,9 @@ export default async function Music({
       <div className="pager">
         {pg > 1 && <Link href={link(pg - 1)}>Previous page</Link>}
         {all.length > 16 && <Link href={link(pg + 1)}>Next page</Link>}
-        {(p.q || p.genre) && <Link href="/music">Clear filters</Link>}
+        {(p.q || p.genre || p.category) && (
+          <Link href="/music">Clear filters</Link>
+        )}
       </div>
     </main>
   );

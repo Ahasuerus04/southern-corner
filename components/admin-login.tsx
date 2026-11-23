@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+
 export function AdminLogin({
   ready,
   reset,
@@ -10,64 +11,96 @@ export function AdminLogin({
   reset: boolean;
   token?: string;
 }) {
-  const [recover, R] = useState(false),
-    [msg, M] = useState(""),
-    [busy, B] = useState(false),
-    router = useRouter();
+  const [recover, setRecover] = useState(false);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const router = useRouter();
+
   return (
     <form
       className="panel"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        B(true);
-        M("");
-        const f = new FormData(e.currentTarget);
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setBusy(true);
+        setMessage("");
+        const form = new FormData(event.currentTarget);
         try {
-          const path = token
-            ? "reset-password"
-            : recover
-              ? "request-password-reset"
-              : "sign-in/email";
-          const payload = token
-            ? { token, newPassword: f.get("password") }
-            : recover
-              ? {
-                  email: f.get("email"),
-                  redirectTo: `${location.origin}/admin/login`,
-                }
-              : { email: f.get("email"), password: f.get("password") };
-          const r = await fetch(`/api/auth/${path}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          if (!r.ok) throw Error();
-          if (recover)
-            M("If the address is eligible, a reset link will be sent.");
-          else if (token) {
+          if (token) {
+            const response = await fetch("/api/auth/reset-password", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                token,
+                newPassword: form.get("password"),
+              }),
+            });
+            if (!response.ok) throw new Error();
             router.replace("/admin/login");
-            M("Password updated. Sign in to continue.");
+            setMessage("Password updated. Sign in to continue.");
+          } else if (recover) {
+            const response = await fetch(
+              "/api/auth/request-password-reset",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  email: form.get("identifier"),
+                  redirectTo: `${location.origin}/admin/login`,
+                }),
+              },
+            );
+            if (!response.ok) throw new Error();
+            setMessage(
+              "If the address is eligible, a reset link will be sent.",
+            );
           } else {
-            router.replace("/admin");
+            const response = await fetch("/api/admin/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                identifier: form.get("identifier"),
+                password: form.get("password"),
+              }),
+            });
+            if (!response.ok) {
+              const payload = await response.json().catch(() => null);
+              throw new Error(
+                typeof payload?.error === "string"
+                  ? payload.error
+                  : "Invalid email, username or password.",
+              );
+            }
+            router.replace("/admin/dashboard");
             router.refresh();
           }
-        } catch {
-          M("Request unsuccessful. Check your details and try again.");
+        } catch (error) {
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : "Request unsuccessful. Check your details and try again.",
+          );
         } finally {
-          B(false);
+          setBusy(false);
         }
       }}
     >
       {!ready && (
-        <p className="notice">
-          Administrator access is offline in this edition. Complete the local
-          Neon and Better Auth setup in the README to enable sign-in.
+        <p className="notice warn">
+          Administrator access is offline. Configure <code>DATABASE_URL</code>,{" "}
+          <code>BETTER_AUTH_SECRET</code> and run <code>bun run admin:create</code>{" "}
+          to enable sign-in.
         </p>
       )}
       {!token && (
         <label className="field">
-          Email address
-          <input name="email" type="email" autoComplete="username" required />
+          Email or username
+          <input
+            name="identifier"
+            type={recover ? "email" : "text"}
+            autoComplete="username"
+            required
+            maxLength={320}
+          />
         </label>
       )}
       {!recover && (
@@ -79,6 +112,7 @@ export function AdminLogin({
             autoComplete={token ? "new-password" : "current-password"}
             required
             minLength={token ? 12 : 1}
+            maxLength={72}
           />
         </label>
       )}
@@ -96,14 +130,14 @@ export function AdminLogin({
           type="button"
           className="secondary"
           onClick={() => {
-            R(!recover);
-            M("");
+            setRecover(!recover);
+            setMessage("");
           }}
         >
           {recover ? "Back to sign in" : "Forgot password?"}
         </button>
       )}
-      <p role="status">{msg}</p>
+      <p role="status">{message}</p>
     </form>
   );
 }

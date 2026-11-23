@@ -41,7 +41,7 @@ export function Nav() {
           ))}
         </nav>
         <span className="open-tag">
-          <i /> PUBLIC LIBRARY
+          <i /> MIHAG CREATIONS
         </span>
         <button
           className="theme-switch"

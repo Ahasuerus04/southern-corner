@@ -14,7 +14,7 @@ export type Track = {
 };
 export const clock = (s: number) =>
   `${Math.floor((s || 0) / 60)}:${String(Math.floor((s || 0) % 60)).padStart(2, "0")}`;
-export function isAdmin(s: { user?: { role?: string } } | null) {
+export function isAdmin(s: { user?: { role?: string | null } } | null) {
   return s?.user?.role === "admin";
 }
 export const rank = (a: Track, b: Track) =>

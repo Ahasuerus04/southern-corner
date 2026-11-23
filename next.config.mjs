@@ -21,6 +21,7 @@ const nextConfig = {
         source: "/admin/:path*",
         headers: [
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
           { key: "Cache-Control", value: "private, no-store" },
         ],
       },

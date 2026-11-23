@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     template: "%s · Southern corner",
   },
   description:
-    "Discover independent music. Stream and download tracks from the Sidewave open music library.",
+    "This platform has been sponsored by mihag creations team with single and strong agenda, Helping all the Upcoming artists by exposing their talents and skills to the world",
   icons: { icon: "/mark.svg" },
 };
 export const viewport: Viewport = {
@@ -32,9 +32,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <small>
             {demo
               ? "Local development collection · original demo recordings"
-              : "Independent music. Open to everyone."}
+              : "Sponsored by mihag creations"
+  }
           </small>
-          <Link href="/admin">Created by Hasuerus</Link>
+          <Link href="/admin">Created by Hasuerus </Link>
         </footer>
         <Player />
         <Toaster position="bottom-right" theme="dark" />

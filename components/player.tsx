@@ -75,7 +75,7 @@ export function Player() {
     <aside className="player" aria-label="Audio player">
       <audio
         ref={ref}
-        src={`/api/media/${t.id}`}
+        src={`/api/music/${t.id}/stream`}
         onLoadStart={() => {
           T(0);
           D(0);

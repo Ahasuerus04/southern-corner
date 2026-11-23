@@ -7,8 +7,12 @@ import {
   boolean,
   index,
   date,
+  customType,
 } from "drizzle-orm/pg-core";
 const stamp = (n: string) => timestamp(n, { withTimezone: true });
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => "bytea",
+});
 export const tracks = pgTable(
   "tracks",
   {
@@ -34,6 +38,10 @@ export const tracks = pgTable(
   (t) => [
     index("track_rank").on(t.published, t.downloads, t.created),
     index("track_recent").on(t.published, t.created),
+    index("track_title").on(t.title),
+    index("track_artist").on(t.artist),
+    index("track_genre").on(t.genre),
+    index("track_downloads").on(t.downloads),
   ],
 );
 export const events = pgTable(
@@ -50,6 +58,13 @@ export const events = pgTable(
     index("event_date").on(t.time),
   ],
 );
+export const media = pgTable("media_objects", {
+  key: text("key").primaryKey(),
+  contentType: text("content_type").notNull(),
+  size: integer("size_bytes").notNull(),
+  data: bytea("data").notNull(),
+  created: stamp("created_at").notNull().defaultNow(),
+});
 export const user = pgTable("user", {
   id: text().primaryKey(),
   name: text().notNull(),

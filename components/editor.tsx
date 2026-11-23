@@ -1,111 +1,188 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { Track } from "@/lib/types";
-export function Editor({ t, release = "" }: { t?: Track; release?: string }) {
-  const [progress, P] = useState<number | null>(null),
-    [files, F] = useState<Record<string, string>>({}),
-    [msg, M] = useState(""),
-    xhr = useRef<XMLHttpRequest | null>(null),
-    router = useRouter();
+import { useUploadStore } from "@/lib/stores/upload";
+
+function errorMessage(xhr: XMLHttpRequest) {
+  try {
+    const payload = JSON.parse(xhr.responseText);
+    return typeof payload?.error === "string"
+      ? payload.error
+      : "Unable to save this upload.";
+  } catch {
+    return "Unable to save this upload.";
+  }
+}
+
+export function Editor({
+  t,
+  release = "",
+  categories = [],
+}: {
+  t?: Track;
+  release?: string;
+  categories?: string[];
+}) {
+  const { progress, busy, message, start, update, setMessage, finish } =
+    useUploadStore();
+  const [files, setFiles] = useState<Record<string, string>>({});
+  const xhr = useRef<XMLHttpRequest | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    useUploadStore.getState().reset();
+  }, []);
+
   return (
     <form
       className="panel narrow"
-      onSubmit={(e) => {
-        e.preventDefault();
+      onSubmit={(event) => {
+        event.preventDefault();
         if (xhr.current) return;
-        const f = new FormData(e.currentTarget),
-          r = new XMLHttpRequest();
-        xhr.current = r;
-        r.open("POST", "/api/admin/music");
-        P(0);
-        M("");
-        r.upload.onprogress = (v) =>
-          P(v.lengthComputable ? Math.round((v.loaded / v.total) * 100) : 0);
-        r.onload = () => {
-          if (r.status === 200) {
-            toast.success("Track saved");
-            router.push("/admin/music");
-            router.refresh();
-          } else
-            M(
-              (() => {
-                try {
-                  return JSON.parse(r.responseText).error;
-                } catch {
-                  return "Unable to save this upload.";
-                }
-              })(),
+        const form = new FormData(event.currentTarget);
+        const request = new XMLHttpRequest();
+        xhr.current = request;
+        start();
+        request.open("POST", "/api/admin/music/upload");
+        request.upload.onprogress = (progressEvent) => {
+          if (progressEvent.lengthComputable)
+            update(
+              Math.round(
+                (progressEvent.loaded / progressEvent.total) * 100,
+              ),
             );
         };
-        r.onerror = () => M("Upload failed. Please retry.");
-        r.onabort = () =>
-          M(
+        request.onload = () => {
+          if (request.status === 200 || request.status === 201) {
+            toast.success(t ? "Track updated" : "Track uploaded");
+            router.push("/admin/dashboard/music");
+            router.refresh();
+          } else {
+            setMessage(errorMessage(request));
+            toast.error(errorMessage(request));
+          }
+        };
+        request.onerror = () => {
+          setMessage("Upload failed. Check your connection and try again.");
+          toast.error("Upload failed. Please retry.");
+        };
+        request.onabort = () =>
+          setMessage(
             "Upload cancelled. Refresh the library to check whether processing finished.",
           );
-        r.onloadend = () => {
+        request.onloadend = () => {
           xhr.current = null;
-          P(null);
+          finish();
         };
-        r.send(f);
+        request.send(form);
       }}
     >
       {t && <input type="hidden" name="id" value={t.id} />}
-      <fieldset disabled={progress !== null}>
-        {(["title", "artist", "genre"] as const).map((k) => (
-          <label className="field" key={k}>
-            {k[0].toUpperCase() + k.slice(1)}
-            {k !== "genre" ? " *" : ""}
+      <fieldset disabled={busy}>
+        <div className="form-grid">
+          <label className="field">
+            Title *
             <input
-              required={k !== "genre"}
-              name={k}
-              defaultValue={t?.[k]}
-              maxLength={k === "title" ? 180 : k === "artist" ? 150 : 80}
+              required
+              name="title"
+              defaultValue={t?.title}
+              maxLength={180}
             />
           </label>
-        ))}
+          <label className="field">
+            Artist *
+            <input
+              required
+              name="artist"
+              defaultValue={t?.artist}
+              maxLength={150}
+            />
+          </label>
+        </div>
+        <label className="field">
+          Category *
+          <input
+            required
+            name="category"
+            list="music-categories"
+            defaultValue={t?.genre}
+            maxLength={80}
+            placeholder="Ambient, Electronic, Lo-fi…"
+          />
+          <datalist id="music-categories">
+            {categories.map((category) => (
+              <option key={category} value={category} />
+            ))}
+          </datalist>
+        </label>
         <label className="field">
           Release date
           <input type="date" name="release" defaultValue={release} />
         </label>
         <label className="field">
-          Release notes
+          Description
           <textarea
             name="description"
             defaultValue={t?.description}
             maxLength={4000}
+            placeholder="Release notes, credits, licensing…"
           />
         </label>
-        {["audio", "cover"].map((k) => (
-          <label className="field" key={k}>
-            {k === "audio"
-              ? "Recording (MP3, up to 32 MiB)"
-              : "Cover (JPEG, PNG or WebP, up to 5 MiB)"}
-            <input
-              name={k}
-              type="file"
-              required={!t && k === "audio"}
-              accept={
-                k === "audio"
-                  ? ".mp3,audio/mpeg"
-                  : "image/jpeg,image/png,image/webp"
-              }
-              onChange={(e) => {
-                const v = e.target.files?.[0];
-                F({
-                  ...files,
-                  [k]: v
-                    ? `${v.name} · ${(v.size / 1048576).toFixed(2)} MiB`
-                    : "",
-                });
-              }}
-            />
-            <small>
-              {files[k] || (t ? "Leave empty to keep the current file." : "")}
-            </small>
-          </label>
-        ))}
+        <label className="field">
+          MP3 recording {t ? "(leave empty to keep the current file)" : "*"}
+          <input
+            name="audio"
+            type="file"
+            required={!t}
+            accept=".mp3,audio/mpeg"
+            onChange={(event) => {
+              const value = event.target.files?.[0];
+              setFiles({
+                ...files,
+                audio: value
+                  ? `${value.name} · ${(value.size / 1048576).toFixed(2)} MiB`
+                  : "",
+              });
+            }}
+          />
+          <small>
+            {files.audio ||
+              (t
+                ? "Replace the audio only when you want a new upload."
+                : "MP3 only. The file signature and audio stream are validated on the server.")}
+          </small>
+        </label>
+        <label className="field">
+          Album artwork (optional, JPEG/PNG/WebP)
+          <input
+            name="artwork"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(event) => {
+              const value = event.target.files?.[0];
+              setFiles({
+                ...files,
+                artwork: value
+                  ? `${value.name} · ${(value.size / 1048576).toFixed(2)} MiB`
+                  : "",
+              });
+            }}
+          />
+          <small>
+            {files.artwork ||
+              (t
+                ? "Leave empty to keep the current artwork."
+                : "Artwork is resized and re-encoded as WebP.")}
+          </small>
+        </label>
+        {t?.cover && (
+          <div className="current-artwork">
+            <img src={t.cover} alt={`Current artwork for ${t.title}`} />
+            <small>Current artwork</small>
+          </div>
+        )}
         <div className="actions">
           <label>
             <input
@@ -124,18 +201,20 @@ export function Editor({ t, release = "" }: { t?: Track; release?: string }) {
             Published
           </label>
         </div>
-        <button className="primary">Save track</button>
+        <button className="primary" disabled={busy}>
+          {busy ? "Uploading…" : t ? "Save changes" : "Upload track"}
+        </button>
       </fieldset>
       {progress !== null && (
-        <div className="actions">
+        <div className="actions" aria-live="polite">
           <progress max="100" value={progress} />
-          {progress}%{" "}
+          <span>{progress}%</span>
           <button type="button" onClick={() => xhr.current?.abort()}>
             Cancel
           </button>
         </div>
       )}
-      <p role="status">{msg}</p>
+      <p role="status">{message}</p>
     </form>
   );
 }

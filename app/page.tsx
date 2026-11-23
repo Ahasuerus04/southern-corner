@@ -18,13 +18,13 @@ export default async function Home() {
             <i /> THE OPEN MUSIC ARCHIVE
           </span>
           <h1>
-            Find your next
+            Find your favorite
             <br />
-            <em>frequency.</em>
+            <em>songs here!.</em>
           </h1>
           <p>
-            Independent sounds, free to stream and download.
-            <br className="wide" /> No accounts. Just music.
+            This platform has been sponsored by mihag creations team with single and strong agenda, Helping all the Upcoming artists by exposing their talents and skills to the world
+              
           </p>
           <Form className="hero-search" action="/music">
             <Search size={18} />

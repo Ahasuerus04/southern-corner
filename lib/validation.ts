@@ -1,22 +1,111 @@
 import { z } from "zod";
-export const metadataSchema = z.object({
-  title: z.string().trim().min(1).max(180),
-  artist: z.string().trim().min(1).max(150),
-  genre: z
-    .string()
-    .trim()
-    .max(80)
-    .transform((v) => v || "Other"),
-  description: z.string().trim().max(4000),
-  release: z.union([z.iso.date(), z.literal("")]).transform((v) => v || null),
-  published: z.enum(["on", ""]).transform((v) => !!v),
-  featured: z.enum(["on", ""]).transform((v) => !!v),
-});
-export const audioLimit = 32 * 1024 * 1024,
-  coverLimit = 5 * 1024 * 1024;
+
+const category = z
+  .string()
+  .trim()
+  .max(80)
+  .optional()
+  .transform((v) => v || undefined);
+
+const flag = z
+  .union([z.boolean(), z.enum(["on", "true", "1", ""])])
+  .transform((v) => v === true || v === "on" || v === "true" || v === "1");
+
+const optionalFlag = flag.optional();
+
+/** Multipart form payload used by the upload/edit screen. */
+export const musicMetadataSchema = z
+  .object({
+    title: z.string().trim().min(1).max(180),
+    artist: z.string().trim().min(1).max(150),
+    category,
+    genre: category,
+    description: z.string().trim().max(4000).default(""),
+    release: z
+      .union([z.iso.date(), z.literal("")])
+      .optional()
+      .transform((v) => v || null),
+    published: optionalFlag,
+    featured: optionalFlag,
+  })
+  .transform((v) => ({
+    title: v.title,
+    artist: v.artist,
+    genre: v.category ?? v.genre ?? "Other",
+    description: v.description,
+    release: v.release,
+    published: v.published ?? false,
+    featured: v.featured ?? false,
+  }));
+
+/** Backwards-compatible name for the multipart metadata schema. */
+export const metadataSchema = musicMetadataSchema;
+
+/** Partial JSON payload used by PATCH /api/admin/music/[id]. */
+export const musicPatchSchema = z
+  .object({
+    title: z.string().trim().min(1).max(180).optional(),
+    artist: z.string().trim().min(1).max(150).optional(),
+    category,
+    genre: category,
+    description: z.string().trim().max(4000).optional(),
+    release: z.union([z.iso.date(), z.literal(""), z.null()]).optional(),
+    published: optionalFlag,
+    featured: optionalFlag,
+  })
+  .transform((v) => ({
+    ...(v.title !== undefined ? { title: v.title } : {}),
+    ...(v.artist !== undefined ? { artist: v.artist } : {}),
+    ...(v.category !== undefined || v.genre !== undefined
+      ? { genre: v.category ?? v.genre }
+      : {}),
+    ...(v.description !== undefined ? { description: v.description } : {}),
+    ...(v.release !== undefined ? { release: v.release || null } : {}),
+    ...(v.published !== undefined ? { published: v.published } : {}),
+    ...(v.featured !== undefined ? { featured: v.featured } : {}),
+  }));
+
+export const loginSchema = z
+  .object({
+    identifier: z.string().trim().min(1).max(320).optional(),
+    email: z.string().trim().min(1).max(320).optional(),
+    password: z.string().min(1).max(72),
+  })
+  .refine((v) => Boolean(v.identifier || v.email), {
+    message: "Enter your email or username.",
+  });
+
+export const audioLimit =
+  Math.min(
+    200,
+    Math.max(1, Number(process.env.MAX_AUDIO_SIZE_MB) || 32),
+  ) *
+  1024 *
+  1024;
+export const coverLimit =
+  Math.min(
+    50,
+    Math.max(1, Number(process.env.MAX_ARTWORK_SIZE_MB) || 5),
+  ) *
+  1024 *
+  1024;
+
 export function fits(size: number, cap: number) {
   return Number.isInteger(size) && size > 0 && size <= cap;
 }
+
+/**
+ * MP3 files start with an ID3 tag or an MPEG audio frame sync. Extensions
+ * and browser-supplied MIME types are never trusted on their own.
+ */
+export function looksLikeMp3(bytes: Uint8Array) {
+  if (bytes.length < 4) return false;
+  if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33)
+    return true; // "ID3"
+  // 11-bit frame sync + MPEG Layer III layer bits.
+  return bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0 && (bytes[1] & 0x06) === 0x02;
+}
+
 export function slug(title: string) {
   return `${
     title

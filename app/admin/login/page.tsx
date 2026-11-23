@@ -11,7 +11,7 @@ export default async function Login({
 }: {
   searchParams: Promise<{ token?: string }>;
 }) {
-  if (await administrator(await headers())) redirect("/admin");
+  if (await administrator(await headers())) redirect("/admin/dashboard");
   const { token } = await searchParams;
   return (
     <main className="wrap page narrow">

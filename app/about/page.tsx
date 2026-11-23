@@ -41,7 +41,7 @@ export default function About() {
         )}
         <div className="actions">
           <Link className="primary" href="/music">
-            Explore the library →
+            Explore our Library
           </Link>
         </div>
       </div>
