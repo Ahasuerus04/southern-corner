@@ -11,7 +11,8 @@
     "lint": "eslint app components lib setup tests",
     "auth:enable": "bun --env-file=.env.local --env-file=.env setup/enable.ts",
     "db:migrate": "bun --env-file=.env.local --env-file=.env run drizzle-kit migrate",
-    "admin:create": "bun --env-file=.env.local --env-file=.env setup/admin.ts"
+    "admin:create": "bun --env-file=.env.local --env-file=.env setup/admin.ts",
+    "storage:cors": "bun --env-file=.env.local --env-file=.env setup/cors.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1171.0",

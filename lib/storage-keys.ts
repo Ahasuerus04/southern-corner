@@ -38,3 +38,11 @@ export function musicObjectKey() {
 export function artworkObjectKey() {
   return `${ARTWORK_PREFIX}${crypto.randomUUID()}.webp`;
 }
+
+/**
+ * Raw artwork uploaded by the browser before the server validates and
+ * re-encodes it. The `.source` suffix keeps it distinct from public covers.
+ */
+export function artworkSourceKey() {
+  return `${ARTWORK_PREFIX}${crypto.randomUUID()}.source`;
+}

@@ -68,11 +68,15 @@ export async function GET(
     return new Response(null, {
       status: 307,
       headers: {
-        Location: await signed(key, { filename }),
+        Location: await signed(key, {
+          filename,
+          ...(cover ? {} : { contentType: track.mime }),
+        }),
         "Cache-Control": preview ? "private, no-store" : "public, max-age=60",
       },
     });
-  } catch {
+  } catch (error) {
+    console.error("Media unavailable", { media: id, error });
     return new Response("Media temporarily unavailable", { status: 503 });
   }
 }

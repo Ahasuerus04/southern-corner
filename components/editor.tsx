@@ -5,15 +5,34 @@ import { toast } from "sonner";
 import type { Track } from "@/lib/types";
 import { useUploadStore } from "@/lib/stores/upload";
 
-function errorMessage(xhr: XMLHttpRequest) {
-  try {
-    const payload = JSON.parse(xhr.responseText);
-    return typeof payload?.error === "string"
-      ? payload.error
-      : "Unable to save this upload.";
-  } catch {
-    return "Unable to save this upload.";
-  }
+function fileFrom(form: FormData, name: string) {
+  const value = form.get(name);
+  return value instanceof File && value.size > 0 ? value : undefined;
+}
+
+async function responseError(response: Response) {
+  const payload = await response.json().catch(() => null);
+  return typeof payload?.error === "string"
+    ? payload.error
+    : "Unable to save this upload.";
+}
+
+async function presign(kind: "audio" | "artwork", file: File) {
+  const response = await fetch("/api/admin/music/presign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      kind,
+      contentType:
+        file.type || (kind === "audio" ? "audio/mpeg" : "image/jpeg"),
+      size: file.size,
+    }),
+  });
+  if (!response.ok) throw new Error(await responseError(response));
+  const payload = await response.json().catch(() => null);
+  if (typeof payload?.url !== "string" || typeof payload?.key !== "string")
+    throw new Error("Could not prepare the upload.");
+  return payload as { url: string; key: string };
 }
 
 export function Editor({
@@ -28,55 +47,162 @@ export function Editor({
   const { progress, busy, message, start, update, setMessage, finish } =
     useUploadStore();
   const [files, setFiles] = useState<Record<string, string>>({});
-  const xhr = useRef<XMLHttpRequest | null>(null);
+  const active = useRef<XMLHttpRequest | null>(null);
+  const running = useRef(false);
   const router = useRouter();
 
   useEffect(() => {
     useUploadStore.getState().reset();
   }, []);
 
+  function put(
+    url: string,
+    file: File,
+    contentType: string,
+    onProgress: (loaded: number) => void,
+  ) {
+    return new Promise<void>((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      active.current = request;
+      request.open("PUT", url);
+      request.setRequestHeader("Content-Type", contentType);
+      request.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress(event.loaded);
+      };
+      request.onload = () => {
+        active.current = null;
+        if (request.status >= 200 && request.status < 300) resolve();
+        else
+          reject(
+            new Error(
+              `The storage service rejected the upload (${request.status}).`,
+            ),
+          );
+      };
+      request.onerror = () => {
+        active.current = null;
+        reject(
+          new Error(
+            "Direct upload failed. Check the bucket CORS configuration and your connection.",
+          ),
+        );
+      };
+      request.onabort = () => {
+        active.current = null;
+        reject(new DOMException("Upload cancelled", "AbortError"));
+      };
+      request.send(file);
+    });
+  }
+
   return (
     <form
       className="panel narrow"
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault();
-        if (xhr.current) return;
+        if (running.current) return;
         const form = new FormData(event.currentTarget);
-        const request = new XMLHttpRequest();
-        xhr.current = request;
+        const metadata = {
+          title: String(form.get("title") || ""),
+          artist: String(form.get("artist") || ""),
+          category: String(form.get("category") || ""),
+          description: String(form.get("description") || ""),
+          release: String(form.get("release") || ""),
+          published: form.get("published") === "on",
+          featured: form.get("featured") === "on",
+        };
+        const audioFile = fileFrom(form, "audio");
+        const artworkFile = fileFrom(form, "artwork");
+        if (!t && !audioFile) {
+          toast.error("Choose an MP3 recording.");
+          return;
+        }
+
+        running.current = true;
         start();
-        request.open("POST", "/api/admin/music/upload");
-        request.upload.onprogress = (progressEvent) => {
-          if (progressEvent.lengthComputable)
-            update(
-              Math.round(
-                (progressEvent.loaded / progressEvent.total) * 100,
-              ),
-            );
-        };
-        request.onload = () => {
-          if (request.status === 200 || request.status === 201) {
-            toast.success(t ? "Track updated" : "Track uploaded");
-            router.push("/admin/dashboard/music");
-            router.refresh();
+        try {
+          if (t && !audioFile && !artworkFile) {
+            const response = await fetch(`/api/admin/music/${t.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(metadata),
+            });
+            if (!response.ok) throw new Error(await responseError(response));
           } else {
-            setMessage(errorMessage(request));
-            toast.error(errorMessage(request));
+            const total =
+              (audioFile?.size ?? 0) + (artworkFile?.size ?? 0);
+            let completed = 0;
+            let audioKey: string | undefined;
+            let artworkKey: string | undefined;
+
+            if (audioFile) {
+              const upload = await presign("audio", audioFile);
+              await put(
+                upload.url,
+                audioFile,
+                audioFile.type || "audio/mpeg",
+                (loaded) =>
+                  update(
+                    total
+                      ? Math.round(((completed + loaded) / total) * 100)
+                      : 0,
+                  ),
+              );
+              completed += audioFile.size;
+              audioKey = upload.key;
+              update(total ? Math.round((completed / total) * 100) : 100);
+            }
+
+            if (artworkFile) {
+              const upload = await presign("artwork", artworkFile);
+              await put(
+                upload.url,
+                artworkFile,
+                artworkFile.type || "image/jpeg",
+                (loaded) =>
+                  update(
+                    total
+                      ? Math.round(((completed + loaded) / total) * 100)
+                      : 0,
+                  ),
+              );
+              artworkKey = upload.key;
+            }
+
+            update(100);
+            const response = await fetch("/api/admin/music/upload", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                id: t?.id,
+                audio: audioKey ? { key: audioKey } : undefined,
+                artwork: artworkKey ? { key: artworkKey } : undefined,
+                metadata,
+              }),
+            });
+            if (!response.ok) throw new Error(await responseError(response));
           }
-        };
-        request.onerror = () => {
-          setMessage("Upload failed. Check your connection and try again.");
-          toast.error("Upload failed. Please retry.");
-        };
-        request.onabort = () =>
-          setMessage(
-            "Upload cancelled. Refresh the library to check whether processing finished.",
-          );
-        request.onloadend = () => {
-          xhr.current = null;
+
+          toast.success(t ? "Track updated" : "Track uploaded");
+          router.push("/admin/dashboard/music");
+          router.refresh();
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "AbortError") {
+            setMessage("Upload cancelled.");
+            toast.error("Upload cancelled.");
+          } else {
+            const text =
+              error instanceof Error
+                ? error.message
+                : "Unable to save this upload.";
+            setMessage(text);
+            toast.error(text);
+          }
+        } finally {
+          running.current = false;
+          active.current = null;
           finish();
-        };
-        request.send(form);
+        }
       }}
     >
       {t && <input type="hidden" name="id" value={t.id} />}
@@ -151,7 +277,7 @@ export function Editor({
             {files.audio ||
               (t
                 ? "Replace the audio only when you want a new upload."
-                : "MP3 only. The file signature and audio stream are validated on the server.")}
+                : "MP3 only. The file signature and audio stream are validated on the server after upload.")}
           </small>
         </label>
         <label className="field">
@@ -209,7 +335,7 @@ export function Editor({
         <div className="actions" aria-live="polite">
           <progress max="100" value={progress} />
           <span>{progress}%</span>
-          <button type="button" onClick={() => xhr.current?.abort()}>
+          <button type="button" onClick={() => active.current?.abort()}>
             Cancel
           </button>
         </div>

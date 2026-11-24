@@ -30,7 +30,8 @@ export async function POST(
       verify: false,
     });
     return Response.json({ url }, { headers: { "Cache-Control": "no-store" } });
-  } catch {
+  } catch (error) {
+    console.error("Track download unavailable", { track: id, error });
     return fail(503);
   }
 }

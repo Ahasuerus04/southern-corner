@@ -25,7 +25,10 @@ export async function GET(
       return Response.json({ error: "Track not found." }, { status: 404 });
     if (!(await exists(track.audio)))
       return Response.json({ error: "Track not found." }, { status: 404 });
-    const url = await signed(track.audio, { verify: false });
+    const url = await signed(track.audio, {
+      contentType: track.mime,
+      verify: false,
+    });
     return new Response(null, {
       status: 307,
       headers: {
@@ -34,7 +37,8 @@ export async function GET(
         "Cache-Control": "private, no-store",
       },
     });
-  } catch {
+  } catch (error) {
+    console.error("Audio stream unavailable", { track: id, error });
     return Response.json(
       { error: "Audio temporarily unavailable." },
       { status: 503 },

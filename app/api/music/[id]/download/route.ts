@@ -41,7 +41,8 @@ export async function GET(
         "Cache-Control": "no-store",
       },
     });
-  } catch {
+  } catch (error) {
+    console.error("Track download unavailable", { track: id, error });
     return Response.json(
       { error: "Download temporarily unavailable." },
       { status: 503 },
